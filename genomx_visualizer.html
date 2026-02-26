@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GenomX Visualizer - Bioinformática</title>
+    <style>
+        /* === TEMA TOKYO NIGHT === */
+        :root {
+            --bg: #1a1b26;
+            --bg-alt: #24283b;
+            --fg: #c0caf5;
+            --border: #414868;
+            --primary: #7aa2f7;
+            --primary-hover: #89ddff;
+            --success: #9ece6a;
+            --danger: #f7768e;
+            --warning: #e0af68;
+            --highlight: #bb9af7;
+            --info: #0db9d7;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--fg);
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        /* ===== NAVBAR ===== */
+        .navbar {
+            background-color: var(--bg-alt);
+            border-bottom: 2px solid var(--border);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            flex-wrap: wrap;
+        }
+
+        .navbar-brand {
+            color: var(--primary);
+            font-size: 18px;
+            font-weight: bold;
+            padding: 14px 16px;
+            border-right: 1px solid var(--border);
+            letter-spacing: 1px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--fg);
+            opacity: 0.5;
+            padding: 16px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn:hover { opacity: 0.9; color: var(--primary-hover); }
+        .tab-btn.active { opacity: 1; }
+        
+        .tab-btn[data-tab="sw"].active  { color: var(--danger);  border-bottom-color: var(--danger); }
+        .tab-btn[data-tab="nw"].active  { color: var(--success); border-bottom-color: var(--success); }
+        .tab-btn[data-tab="bwt"].active { color: var(--warning); border-bottom-color: var(--warning); }
+
+        /* ===== CONTENEDORES ===== */
+        .tab-panel { display: none; padding: 20px; animation: fadeIn 0.3s ease; }
+        .tab-panel.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2 { color: var(--primary); margin-top: 0; }
+        h3 { color: var(--success); }
+
+        .controls {
+            background-color: var(--bg-alt);
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .controls input {
+            background-color: var(--bg);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin: 0 10px;
+            text-align: center;
+        }
+
+        .ctrl-btn {
+            background-color: var(--primary);
+            color: var(--bg);
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .ctrl-btn:hover { background-color: var(--primary-hover); transform: scale(1.05); }
+
+        .explanation-box {
+            background-color: var(--bg-alt);
+            padding: 15px;
+            margin: 10px auto;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary);
+            font-family: monospace;
+            font-size: 15px;
+            text-align: left;
+            min-height: 80px;
+            line-height: 1.5;
+        }
+
+        /* ===== TABLAS GENERALES ===== */
+        .matrix-wrapper {
+            overflow-x: auto;
+            margin: 20px auto;
+            max-width: 95%;
+            padding-bottom: 10px;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+            background-color: var(--bg-alt);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        td, th {
+            border: 1px solid var(--border);
+            position: relative;
+            text-align: center;
+        }
+
+        th { background-color: #16161e; color: var(--primary); font-size: 16px; padding: 10px; }
+
+        /* ALINEAMIENTOS (SW / NW) */
+        .aln-cell { width: 110px; height: 90px; }
+        .v-max { font-size: 26px; font-weight: bold; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1; }
+        .mini-val { position: absolute; font-size: 11px; color: var(--fg); opacity: 0.3; font-weight: normal; white-space: nowrap; }
+        .mini-val.chosen { opacity: 1; color: var(--warning); font-weight: bold; text-shadow: 0 0 5px rgba(224, 175, 104, 0.4); z-index: 2; }
+        .v-diag { top: 4px; left: 4px; } .v-up { top: 4px; right: 4px; } .v-left { bottom: 4px; left: 4px; } .v-edge { top: 4px; left: 50%; transform: translateX(-50%); }
+
+        .highlight { border: 2px solid var(--highlight) !important; box-shadow: inset 0 0 15px rgba(187, 154, 247, 0.2), 0 0 15px rgba(187, 154, 247, 0.6) !important; transform: scale(1.05); z-index: 10; background-color: #292e42 !important; }
+        .path-cell { box-shadow: inset 0 0 0 3px var(--danger), inset 0 0 15px rgba(247, 118, 142, 0.3) !important; background-color: rgba(247, 118, 142, 0.15) !important; z-index: 5; }
+
+        /* BWT MATRIZ PRINCIPAL */
+        .bwt-cell { width: 45px; height: 45px; font-size: 20px; font-weight: bold; font-family: monospace; }
+        .first-col { background-color: rgba(158, 206, 106, 0.15) !important; box-shadow: inset 0 0 0 2px var(--success); color: var(--success); }
+        .last-col { background-color: rgba(247, 118, 142, 0.15) !important; box-shadow: inset 0 0 0 3px var(--danger); color: var(--danger); z-index: 5; position: relative; }
+        .highlight-row { background-color: rgba(187, 154, 247, 0.2) !important; box-shadow: inset 0 0 10px rgba(187, 154, 247, 0.5); }
+        .eof-symbol { color: var(--primary); font-weight: 900; }
+
+        /* RESULTADOS NW/SW */
+        .result-box { display: none; margin: 30px auto; background-color: #16161e; padding: 20px; border-radius: 10px; width: fit-content; min-width: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        .solution-item { margin-bottom: 25px; padding-bottom: 15px; border-bottom: 1px dashed var(--border); }
+        .solution-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .solution-title { font-size: 18px; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; text-shadow: 0 0 5px rgba(0,0,0,0.5); }
+        
+        .alignment-container { font-family: monospace; font-size: 24px; display: flex; flex-direction: column; align-items: center; }
+        .seq-row, .pipe-row { display: flex; justify-content: center; }
+        .seq-row span, .pipe-row span { width: 30px; text-align: center; }
+        .pipe-row span { color: var(--success); font-weight: bold; }
+
+        .match-text { color: var(--success); }
+        .mismatch-text { color: var(--danger); }
+        .gap-text { color: var(--warning); }
+        .bwt-text { color: var(--warning); font-weight: bold; }
+
+        /* ========================================================
+           DASHBOARD FM-INDEX (EL DISEÑO QUE PIDIÓ EL PROFESOR) 
+           ======================================================== */
+        #bwt-dashboard {
+            display: none;
+            margin: 30px auto;
+            background-color: var(--bg-alt);
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-top: 4px solid var(--success);
+            text-align: left;
+        }
+
+        .fm-dashboard-inner { display: flex; flex-direction: column; gap: 30px; }
+
+        .fm-header-bar { display: flex; gap: 20px; font-family: monospace; font-size: 18px; justify-content: center; flex-wrap: wrap;}
+        .fm-header-pill { border: 1px solid var(--success); padding: 10px 20px; border-radius: 6px; background: rgba(158, 206, 106, 0.1); color: var(--fg); box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
+        
+        .fm-tables { display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; }
+        .fm-table-wrap h4 { color: var(--success); margin-top: 0; margin-bottom: 15px; font-family: 'Segoe UI', sans-serif; text-align: left; border-bottom: 1px solid var(--border); padding-bottom: 5px;}
+        .fm-table { font-family: monospace; font-size: 15px; margin: 0; background: var(--bg); box-shadow: 0 4px 8px rgba(0,0,0,0.3);}
+        .fm-table th { background: #16161e; color: var(--primary); padding: 8px 15px; }
+        .fm-table td { padding: 8px 15px; text-align: center; border: 1px solid var(--border); }
+        
+        .fm-bs { background: #16161e; padding: 25px; border-radius: 8px; border: 1px solid var(--border); }
+        .fm-bs h4 { color: var(--success); margin-top: 0; font-family: 'Segoe UI', sans-serif; font-size: 18px; margin-bottom: 10px;}
+        .fm-formula { color: var(--fg); opacity: 0.8; font-family: monospace; margin-bottom: 20px; font-size: 15px; }
+        
+        .bs-step { background: var(--bg-alt); padding: 15px 20px; border-radius: 8px; margin-bottom: 15px; border-left: 5px solid var(--success); display: flex; gap: 20px; align-items: center; font-family: monospace; font-size: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+        .bs-step.inicio { border-left-color: var(--warning); background: rgba(224, 175, 104, 0.05); padding: 12px 20px; font-weight: bold;}
+        .range-pill { border: 1px solid var(--warning); color: var(--warning); padding: 3px 8px; border-radius: 4px; background: rgba(224, 175, 104, 0.15); font-weight: bold; }
+        
+        .char-badge { background: var(--success); color: var(--bg); min-width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-weight: bold; border-radius: 6px; font-size: 22px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        .char-details { display: flex; flex-direction: column; gap: 8px; line-height: 1.4; width: 100%;}
+        
+        .fm-results { margin-top: 10px; }
+        .fm-results h4 { color: var(--success); font-family: 'Segoe UI', sans-serif; font-size: 18px; margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 5px;}
+        .summary-pill { border: 1px solid var(--success); color: var(--success); padding: 12px 25px; border-radius: 25px; display: inline-block; font-weight: bold; margin-bottom: 25px; background: rgba(158, 206, 106, 0.1); font-size: 16px; box-shadow: 0 4px 6px rgba(0,0,0,0.2);}
+        .summary-pill.error { border-color: var(--danger); color: var(--danger); background: rgba(247, 118, 142, 0.1); }
+        
+        .match-card { background: rgba(158, 206, 106, 0.05); border: 1px solid rgba(158, 206, 106, 0.3); padding: 15px 25px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; gap: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: fit-content; }
+        .match-pos { font-weight: bold; color: var(--success); font-size: 15px; letter-spacing: 1px; min-width: 60px; font-family: monospace;}
+        .match-chars { display: flex; gap: 12px; }
+        .char-block { display: flex; flex-direction: column; align-items: center; background: var(--success); color: var(--bg); border-radius: 6px; padding: 6px 12px; font-weight: bold; font-size: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        .char-block small { font-size: 12px; opacity: 0.9; margin-top: 4px; font-family: monospace; font-weight: bold;}
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-alt); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    </style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+    <div class="navbar-brand">🧬 GenomX Visualizer</div>
+    <button class="tab-btn active" data-tab="sw" onclick="showTab('sw')">Smith-Waterman</button>
+    <button class="tab-btn" data-tab="nw" onclick="showTab('nw')">Needleman-Wunsch</button>
+    <button class="tab-btn" data-tab="bwt" onclick="showTab('bwt')">Burrows-Wheeler (BWT)</button>
+</nav>
+
+<!-- ==================== SMITH-WATERMAN ==================== -->
+<div id="panel-sw" class="tab-panel active">
+    <h2>Smith-Waterman (Alineamiento Local Multi-Solución)</h2>
+    <div class="controls">
+        <label>Seq 1: <input type="text" id="sw-seq1" value="ATAT" style="width:100px;"></label>
+        <label>Seq 2: <input type="text" id="sw-seq2" value="TATA" style="width:100px;"></label>
+        <small style="margin-left:15px;">M: <span class="match-text">+1</span> | MM: <span class="mismatch-text">-1</span> | G: <span class="gap-text">-1</span></small>
+    </div><br>
+    <button class="ctrl-btn" onclick="SW.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="SW.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="SW.reset()">Reiniciar</button>
+
+    <div id="sw-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar el cálculo.</div>
+    <div class="matrix-wrapper"><div id="sw-matrix"></div></div>
+    <div id="sw-alignment-box" class="result-box" style="border: 1px solid var(--border);">
+        <h3>Rutas Locales Óptimas</h3>
+        <div id="sw-alignment-result" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<!-- ==================== NEEDLEMAN-WUNSCH ==================== -->
+<div id="panel-nw" class="tab-panel">
+    <h2>Needleman-Wunsch (Alineamiento Global)</h2>
+    <div class="controls">
+        <label>Seq 1: <input type="text" id="nw-seq1" value="ACGTGA" style="width:120px;"></label>
+        <label>Seq 2: <input type="text" id="nw-seq2" value="ACTAGA" style="width:120px;"></label>
+        <small style="margin-left:15px;">M: <span class="match-text">+1</span> | MM: <span class="mismatch-text">-1</span> | G: <span class="gap-text">-1</span></small>
+    </div><br>
+    <button class="ctrl-btn" onclick="NW.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="NW.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="NW.reset()">Reiniciar</button>
+
+    <div id="nw-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar el cálculo.</div>
+    <div class="matrix-wrapper"><div id="nw-matrix"></div></div>
+    <div id="nw-alignment-box" class="result-box" style="border: 1px solid var(--success);">
+        <h3>Alineamiento Global (Traceback)</h3>
+        <div class="alignment-container" id="nw-alignment-result"></div>
+    </div>
+</div>
+
+<!-- ==================== BURROWS-WHEELER (BWT + FM INDEX) ==================== -->
+<div id="panel-bwt" class="tab-panel">
+    <h2>Transformada de Burrows-Wheeler (BWT) & FM-Index</h2>
+    <div class="controls">
+        <label>Texto a transformar: <input type="text" id="bwt-input" value="BANANA" style="width:150px; letter-spacing:2px;"></label><br><br>
+        <label>Patrón a buscar: <input type="text" id="bwt-pattern" value="ANA" style="width:100px; text-transform:uppercase;"></label><br><br>
+        <small>El marcador <b class="eof-symbol">$</b> se añadirá automáticamente.</small>
+    </div><br>
+    <button class="ctrl-btn" onclick="BWT.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="BWT.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="BWT.reset()">Reiniciar</button>
+
+    <div id="bwt-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar a generar la matriz.</div>
+    <div class="matrix-wrapper"><div id="bwt-matrix"></div></div>
+    
+    <!-- EL NUEVO DASHBOARD AL ESTILO DE TU IMAGEN -->
+    <div id="bwt-dashboard"></div>
+</div>
+
+<script>
+/* ============================================================
+   TABS LOGIC
+   ============================================================ */
+function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.querySelector(`.tab-btn[data-tab="${name}"]`).classList.add('active');
+}
+
+/* ============================================================
+   SMITH-WATERMAN 
+   ============================================================ */
+const SW = (() => {
+    const MATCH = 1, MISMATCH = -1, GAP = -1;
+    const palette =['#f7768e','#9ece6a','#7aa2f7','#e0af68','#bb9af7','#7dcfff'];
+    let seq1, seq2, matrix, details, step, pathMap;
+
+    function init() {
+        seq1 = document.getElementById('sw-seq1').value.toUpperCase().trim() || "ATAT";
+        seq2 = document.getElementById('sw-seq2').value.toUpperCase().trim() || "TATA";
+        matrix = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(0));
+        details = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(null));
+        pathMap = {};
+        for(let i=0;i<=seq1.length;i++) matrix[i][0]=0;
+        for(let j=0;j<=seq2.length;j++) matrix[0][j]=0;
+        step = 1;
+        document.getElementById('sw-explanation').innerHTML = "Bordes inicializados en 0.<br>Haz clic en 'Paso a Paso'.";
+        document.getElementById('sw-alignment-box').style.display = 'none';
+        drawMatrix();
+    }
+
+    function drawMatrix(hI=-1, hJ=-1) {
+        let html = '<table><tr><th></th><th>-</th>';
+        for(let j=0;j<seq2.length;j++) html += '<th>'+seq2[j]+'</th>';
+        html += '</tr>';
+        for(let i=0;i<=seq1.length;i++) {
+            html += '<tr>';
+            html += i===0 ? '<th>-</th>' : '<th>'+seq1[i-1]+'</th>';
+            for(let j=0;j<=seq2.length;j++) {
+                let hCls = (i===hI && j===hJ) ? 'highlight' : '';
+                let key = i+'-'+j;
+                let cellStyle = '';
+                if(pathMap[key] && pathMap[key].length > 0) {
+                    let sols = pathMap[key];
+                    if(sols.length===1) {
+                        let c = palette[sols[0]%palette.length];
+                        cellStyle = `box-shadow:inset 0 0 0 3px ${c},inset 0 0 15px ${c}40;background-color:${c}33;z-index:5;`;
+                    } else {
+                        let shadows=[], gradStops=[], pct=100/sols.length;
+                        sols.forEach((sIdx,idx) => {
+                            let c=palette[sIdx%palette.length];
+                            shadows.push(`inset 0 0 0 ${(idx+1)*3}px ${c}`);
+                            gradStops.push(`${c}40 ${idx*pct}%`,`${c}40 ${(idx+1)*pct}%`);
+                        });
+                        cellStyle = `box-shadow:${shadows.join(',')};background:linear-gradient(135deg,${gradStops.join(',')});z-index:5;`;
+                    }
+                }
+                html += `<td class='aln-cell ${hCls}' style='${cellStyle}'>`;
+                if(i===0||j===0) {
+                    html += `<div class='v-max'>${matrix[i][j]}</div>`;
+                } else if(details[i][j]) {
+                    let d=details[i][j], zero=(d.max===0);
+                    html += `<div class='mini-val v-diag ${(!zero&&d.diag===d.max)?"chosen":""}'>↖ ${d.diagStr}=${d.diag}</div>`;
+                    html += `<div class='mini-val v-up ${(!zero&&d.up===d.max)?"chosen":""}'>↑ ${d.upStr}=${d.up}</div>`;
+                    html += `<div class='mini-val v-left ${(!zero&&d.left===d.max)?"chosen":""}'>← ${d.leftStr}=${d.left}</div>`;
+                    html += `<div class='v-max'>${d.max}</div>`;
+                }
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        document.getElementById('sw-matrix').innerHTML = html;
+    }
+
+    function showAlignment() {
+        let maxScore=0; let startCells=[]; let allAlignments=[]; pathMap={};
+        for(let i=0;i<=seq1.length;i++) for(let j=0;j<=seq2.length;j++) if(matrix[i][j]>maxScore) maxScore=matrix[i][j];
+        if(maxScore===0) return;
+        for(let i=0;i<=seq1.length;i++) for(let j=0;j<=seq2.length;j++) if(matrix[i][j]===maxScore) startCells.push({i,j});
+
+        function explorePath(i,j,a1,p,a2,cells) {
+            if(matrix[i][j]===0) {
+                let sIdx=allAlignments.length, color=palette[sIdx%palette.length];
+                allAlignments.push({a1,p,a2,color});
+                cells.forEach(cell => {
+                    let k=cell.i+'-'+cell.j;
+                    if(!pathMap[k]) pathMap[k]=[];
+                    if(!pathMap[k].includes(sIdx)) pathMap[k].push(sIdx);
+                });
+                return;
+            }
+            let d=details[i][j], c1=seq1[i-1], c2=seq2[j-1], m=c1===c2;
+            if(d.diag===d.max) explorePath(i-1,j-1,[c1,...a1],[m?'|':'&nbsp;',...p],[c2,...a2],[...cells,{i:i-1,j:j-1}]);
+            if(d.up===d.max)   explorePath(i-1,j,[c1,...a1],['&nbsp;',...p],['-',...a2],[...cells,{i:i-1,j:j}]);
+            if(d.left===d.max) explorePath(i,j-1,['-',...a1],['&nbsp;',...p],[c2,...a2],[...cells,{i:i,j:j-1}]);
+        }
+
+        startCells.forEach(s => explorePath(s.i,s.j,[],[],[],[{i:s.i,j:s.j}]));
+
+        let html='';
+        allAlignments.forEach((aln,idx) => {
+            html += `<div class="solution-item" style="border-bottom-color:${aln.color}66">`;
+            html += `<div class="solution-title" style="color:${aln.color}">Solución ${idx+1}</div>`;
+            html += `<div class='alignment-container'>`;
+            html += `<div class='seq-row'>`+aln.a2.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `<div class='pipe-row'>`+aln.p.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `<div class='seq-row'>`+aln.a1.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `</div></div>`;
+        });
+        document.getElementById('sw-alignment-result').innerHTML = html;
+        document.getElementById('sw-alignment-box').style.display = 'block';
+    }
+
+    function nextStep() {
+        let total = seq1.length * seq2.length;
+        if(step > total) {
+            if(step === total+1) {
+                document.getElementById('sw-explanation').innerHTML = "<span class='match-text'>¡Matriz completada!</span> Pintando <b class='mismatch-text'>TODAS</b> las rutas posibles...";
+                showAlignment(); drawMatrix(); step++;
+            }
+            return;
+        }
+        let i=Math.floor((step-1)/seq2.length)+1, j=((step-1)%seq2.length)+1;
+        let c1=seq1[i-1], c2=seq2[j-1], isM=(c1===c2), score=isM?MATCH:MISMATCH;
+        let diag=matrix[i-1][j-1]+score, up=matrix[i-1][j]+GAP, left=matrix[i][j-1]+GAP;
+        let maxVal=Math.max(0,diag,up,left);
+        matrix[i][j]=maxVal;
+        details[i][j]={
+            diag,up,left,max:maxVal,
+            diagStr:`${matrix[i-1][j-1]}${score>=0?'+'+score:score}`,
+            upStr:`${matrix[i-1][j]}${GAP>=0?'+'+GAP:GAP}`,
+            leftStr:`${matrix[i][j-1]}${GAP>=0?'+'+GAP:GAP}`
+        };
+        let sT=isM?`<span class='match-text'>+${MATCH}</span>`:`<span class='mismatch-text'>${MISMATCH}</span>`;
+        document.getElementById('sw-explanation').innerHTML = `
+            Calculando <b>(${i},${j})</b> | <b>${c1}</b> vs <b>${c2}</b><br>
+            ↖ Diagonal: ${matrix[i-1][j-1]} ${sT} = <b>${diag}</b> | ↑ Arriba: <b>${up}</b> | ← Izquierda: <b>${left}</b><br>
+            Max: ${maxVal===0?`<span class='reset-text'>0 (Reinicio)</span>`:`<b class='warning'>${maxVal}</b>`}`;
+        drawMatrix(i,j); step++;
+    }
+
+    function fastForward() { let t=seq1.length*seq2.length; while(step<=t+1) nextStep(); }
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ============================================================
+   NEEDLEMAN-WUNSCH
+   ============================================================ */
+const NW = (() => {
+    const MATCH=1, MISMATCH=-1, GAP=-1;
+    let seq1, seq2, matrix, details, step, pathCoords;
+
+    function init() {
+        seq1=document.getElementById('nw-seq1').value.toUpperCase().trim() || "ACGTGA";
+        seq2=document.getElementById('nw-seq2').value.toUpperCase().trim() || "ACTAGA";
+        matrix=Array(seq1.length+1).fill(null).map(()=>Array(seq2.length+1).fill(0));
+        details=Array(seq1.length+1).fill(null).map(()=>Array(seq2.length+1).fill(null));
+        pathCoords=[];
+        for(let i=0;i<=seq1.length;i++) {
+            matrix[i][0]=i*GAP;
+            if(i>0) details[i][0]={isEdge:true,type:'up',str:`${matrix[i-1][0]}${GAP>=0?'+'+GAP:GAP}=${matrix[i][0]}`};
+        }
+        for(let j=0;j<=seq2.length;j++) {
+            matrix[0][j]=j*GAP;
+            if(j>0) details[0][j]={isEdge:true,type:'left',str:`${matrix[0][j-1]}${GAP>=0?'+'+GAP:GAP}=${matrix[0][j]}`};
+        }
+        step=1;
+        document.getElementById('nw-explanation').innerHTML = "Matrices inicializadas.<br>Haz clic en 'Paso a Paso'.";
+        document.getElementById('nw-alignment-box').style.display = 'none';
+        drawMatrix();
+    }
+
+    function drawMatrix(hI=-1, hJ=-1) {
+        let html='<table><tr><th></th><th>-</th>';
+        for(let j=0;j<seq2.length;j++) html+='<th>'+seq2[j]+'</th>';
+        html+='</tr>';
+        for(let i=0;i<=seq1.length;i++) {
+            html+='<tr>';
+            html+=i===0?'<th>-</th>':'<th>'+seq1[i-1]+'</th>';
+            for(let j=0;j<=seq2.length;j++) {
+                let pCls=pathCoords.some(c=>c.i===i&&c.j===j)?'path-cell':'';
+                let hCls=(i===hI&&j===hJ)?'highlight':'';
+                html+=`<td class='aln-cell ${hCls} ${pCls}'>`;
+                if(i===0&&j===0) html+=`<div class='v-max'>${matrix[i][j]}</div>`;
+                else if(details[i][j]&&details[i][j].isEdge) {
+                    let d=details[i][j]; html+=`<div class='mini-val v-edge chosen'>${d.type==='up'?'↑':'←'} ${d.str}</div><div class='v-max'>${matrix[i][j]}</div>`;
+                } else if(details[i][j]) {
+                    let d=details[i][j];
+                    html+=`<div class='mini-val v-diag ${d.diag===d.max?"chosen":""}'>↖ ${d.diagStr}=${d.diag}</div>`;
+                    html+=`<div class='mini-val v-up ${d.up===d.max?"chosen":""}'>↑ ${d.upStr}=${d.up}</div>`;
+                    html+=`<div class='mini-val v-left ${d.left===d.max?"chosen":""}'>← ${d.leftStr}=${d.left}</div>`;
+                    html+=`<div class='v-max'>${d.max}</div>`;
+                }
+                html+='</td>';
+            }
+            html+='</tr>';
+        }
+        html+='</table>';
+        document.getElementById('nw-matrix').innerHTML=html;
+    }
+
+    function showAlignment() {
+        let i=seq1.length, j=seq2.length;
+        let a1=[],p=[],a2=[];
+        pathCoords.push({i,j});
+        while(i>0||j>0) {
+            let cur=matrix[i][j], c1=i>0?seq1[i-1]:'-', c2=j>0?seq2[j-1]:'-';
+            let isM=c1===c2, score=isM?MATCH:MISMATCH;
+            if(i>0&&j>0&&cur===matrix[i-1][j-1]+score) { a1.unshift(c1); a2.unshift(c2); p.unshift(isM?'|':'&nbsp;'); i--; j--; }
+            else if(i>0&&cur===matrix[i-1][j]+GAP) { a1.unshift(c1); a2.unshift('-'); p.unshift('&nbsp;'); i--; }
+            else { a1.unshift('-'); a2.unshift(c2); p.unshift('&nbsp;'); j--; }
+            pathCoords.push({i,j});
+        }
+        let html=`<div class='seq-row'>`+a2.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        html+=`<div class='pipe-row'>`+p.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        html+=`<div class='seq-row'>`+a1.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        document.getElementById('nw-alignment-result').innerHTML=html;
+        document.getElementById('nw-alignment-box').style.display='block';
+    }
+
+    function nextStep() {
+        let total=seq1.length*seq2.length;
+        if(step>total) {
+            if(step===total+1) {
+                document.getElementById('nw-explanation').innerHTML = "<span class='match-text'>¡Matriz completada!</span> Trazando camino...";
+                showAlignment(); drawMatrix(); step++;
+            }
+            return;
+        }
+        let i=Math.floor((step-1)/seq2.length)+1, j=((step-1)%seq2.length)+1;
+        let c1=seq1[i-1], c2=seq2[j-1], isM=(c1===c2), score=isM?MATCH:MISMATCH;
+        let diag=matrix[i-1][j-1]+score, up=matrix[i-1][j]+GAP, left=matrix[i][j-1]+GAP;
+        let maxVal=Math.max(diag,up,left);
+        matrix[i][j]=maxVal;
+        details[i][j]={
+            diag,up,left,max:maxVal,
+            diagStr:`${matrix[i-1][j-1]}${score>=0?'+'+score:score}`,
+            upStr:`${matrix[i-1][j]}${GAP>=0?'+'+GAP:GAP}`,
+            leftStr:`${matrix[i][j-1]}${GAP>=0?'+'+GAP:GAP}`
+        };
+        let sT=isM?`<span class='match-text'>+${MATCH}</span>`:`<span class='mismatch-text'>${MISMATCH}</span>`;
+        document.getElementById('nw-explanation').innerHTML=`Calculando <b>(${i},${j})</b> | <b>${c1}</b> vs <b>${c2}</b><br>↖: ${matrix[i-1][j-1]} ${sT} = <b>${diag}</b> | ↑: <b>${up}</b> | ←: <b>${left}</b><br>Max: <b>${maxVal}</b>`;
+        drawMatrix(i,j); step++;
+    }
+
+    function fastForward() { let t=seq1.length*seq2.length; while(step<=t+1) nextStep(); }
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ============================================================
+   BWT & DASHBOARD FM-INDEX (Estilo Profesor)
+   ============================================================ */
+const BWT = (() => {
+    let originalText='', pattern='', N=0, unsorted=[], sorted=[], step=0;
+
+    function init() {
+        let input=document.getElementById('bwt-input').value.toUpperCase().replace(/\$/g,'').trim() || 'BANANA';
+        pattern=document.getElementById('bwt-pattern').value.toUpperCase().trim() || 'ANA';
+        originalText=input+'$'; 
+        N=originalText.length; 
+        
+        unsorted=[];
+        for(let i=0;i<N;i++) {
+            unsorted.push({str: originalText.slice(i)+originalText.slice(0,i), sa: i});
+        }
+        sorted=[...unsorted].sort((a,b) => a.str.localeCompare(b.str));
+        
+        step=1;
+        document.getElementById('bwt-explanation').innerHTML=`Texto inicial: <span class='bwt-text'>${originalText}</span>.<br>Haz clic en 'Paso a Paso'.`;
+        document.getElementById('bwt-dashboard').style.display='none';
+        drawMatrix();
+    }
+
+    function drawMatrix() {
+        let html='<table>';
+        for(let i=0;i<N;i++) {
+            let rowObj = step<=N ? (i<step ? unsorted[i] : null) : sorted[i];
+            let rowStr = rowObj ? rowObj.str : '';
+            html+='<tr>';
+            for(let j=0;j<N;j++) {
+                let char=rowStr?rowStr[j]:'', cls='';
+                let inner=char==='$'?`<span class='eof-symbol'>$</span>`:char;
+                if(step<=N&&i===step-1&&rowStr) cls+=' highlight-row';
+                if(step>N&&j===0&&rowStr) cls+=' first-col';
+                if(step>N+1&&j===N-1&&rowStr) cls+=' last-col';
+                html+=`<td class='bwt-cell ${cls}'>${inner}</td>`;
+            }
+            html+='</tr>';
+        }
+        html+='</table>';
+        document.getElementById('bwt-matrix').innerHTML=html;
+    }
+
+    function buildDashboard() {
+        let bwt = sorted.map(x => x.str[N-1]);
+        let SA = sorted.map(x => x.sa);
+        
+        // Compute counts & alphabet
+        let counts = {};
+        for(let c of originalText) counts[c] = (counts[c]||0)+1;
+        let alphabet = Object.keys(counts).sort();
+
+        // Tabla C
+        let C = {};
+        let sum = 0;
+        for(let c of alphabet) {
+            C[c] = sum;
+            sum += counts[c];
+        }
+
+        // Tabla Occ
+        let Occ =[];
+        let curOcc = {};
+        alphabet.forEach(c => curOcc[c]=0);
+        for(let i=0; i<N; i++) {
+            curOcc[bwt[i]]++;
+            Occ.push({...curOcc});
+        }
+
+        let dashHTML = `<div class="fm-dashboard-inner">`;
+
+        // 1. HEADER PILLS
+        dashHTML += `<div class="fm-header-bar">
+            <div class="fm-header-pill">BWT = <b style="letter-spacing:3px; color:var(--warning); margin-left:10px;">${bwt.join('').replace(/\$/g,'<span class="eof-symbol">$</span>')}</b></div>
+            <div class="fm-header-pill">SA = <b style="margin-left:10px;">[${SA.join(', ')}]</b></div>
+        </div>`;
+
+        // 2. TABLAS (C y OCC)
+        dashHTML += `<div class="fm-tables">`;
+        // Tabla C
+        dashHTML += `<div class="fm-table-wrap">
+            <h4>Paso 4 — FM-Index: Tabla C</h4>
+            <table class="fm-table"><tr><th>C</th><th>C[C]</th><th>CONTEO EN T</th></tr>`;
+        alphabet.forEach(c => {
+            let dispC = c==='$'?`<span class="eof-symbol">$</span>`:c;
+            dashHTML += `<tr><td><b>${dispC}</b></td><td>${C[c]}</td><td>${counts[c]}</td></tr>`;
+        });
+        dashHTML += `</table></div>`;
+
+        // Tabla Occ
+        dashHTML += `<div class="fm-table-wrap">
+            <h4>Tabla OCC(C, I)</h4>
+            <table class="fm-table"><tr><th>I</th><th>BWT[I]</th>`;
+        alphabet.forEach(c => dashHTML += `<th>OCC(${c==='$'?'$':c},I)</th>`);
+        dashHTML += `</tr>`;
+        for(let i=0; i<N; i++) {
+            let dispBWT = bwt[i]==='$'?`<span class="eof-symbol">$</span>`:bwt[i];
+            dashHTML += `<tr><td>${i}</td><td style="color:var(--danger)"><b>${dispBWT}</b></td>`;
+            alphabet.forEach(c => dashHTML += `<td>${Occ[i][c]}</td>`);
+            dashHTML += `</tr>`;
+        }
+        dashHTML += `</table></div></div>`;
+
+        // 3. BACKWARD SEARCH LOGIC & UI
+        dashHTML += `<div class="fm-bs">
+            <h4>Paso 5 — Backward Search: "${pattern}" <span style="font-size:14px; opacity:0.7; font-weight:normal;">(lectura de derecha → izquierda)</span></h4>
+            <div class="fm-formula">Fórmula: top = C[c] + Occ(c, top-1) &nbsp;|&nbsp; bot = C[c] + Occ(c, bot) - 1</div>
+            <div class="bs-step inicio">
+                Inicio: rango inicial = <span class="range-pill">[top=0, bot=${N-1}]</span> (toda la BWT)
+            </div>`;
+
+        let top = 0; let bot = N-1;
+        let valid = true;
+        
+        for(let pIdx = pattern.length-1; pIdx >= 0; pIdx--) {
+            let c = pattern[pIdx];
+            if(!alphabet.includes(c)) { valid = false; break; }
+            
+            let oldTop = top;
+            let oldBot = bot;
+            
+            let occTop1 = oldTop-1 < 0 ? 0 : Occ[oldTop-1][c];
+            let occBot = oldBot < 0 ? 0 : Occ[oldBot][c];
+
+            top = C[c] + occTop1;
+            bot = C[c] + occBot - 1;
+            
+            let itNum = pattern.length - pIdx;
+            
+            dashHTML += `<div class="bs-step">
+                <div class="char-badge">${c}</div>
+                <div class="char-details">
+                    <div style="opacity:0.8; font-size:14px; margin-bottom:5px;">Carácter <b>"${c}"</b> — iteración ${itNum} de ${pattern.length}</div>
+                    <div>top = C[${c}] + Occ(${c}, ${oldTop-1}) = ${C[c]} + ${occTop1} = <b>${top}</b></div>
+                    <div>bot = C[${c}] + Occ(${c}, ${oldBot}) - 1 = ${C[c]} + ${occBot} - 1 = <b>${bot}</b></div>
+                    <div style="margin-top:5px;">Nuevo rango: <span class="range-pill">[top=${top}, bot=${bot}]</span> → ${Math.max(0, bot-top+1)} fila(s) en SA</div>
+                </div>
+            </div>`;
+            
+            if(top > bot) { valid = false; break; }
+        }
+        dashHTML += `</div>`;
+
+        // 4. RESULTADO FINAL (POS FORMAT)
+        dashHTML += `<div class="fm-results"><h4>Resultado final</h4>`;
+        
+        if(valid && top <= bot) {
+            let matchesCount = bot - top + 1;
+            dashHTML += `<div class="summary-pill">✓ "${pattern}" - ${matchesCount} ocurrencia(s) encontrada(s)</div>`;
+            
+            // Extraer y ordenar cronológicamente las posiciones del SA
+            let foundPositions =[];
+            for(let k = top; k <= bot; k++) foundPositions.push(SA[k]);
+            foundPositions.sort((a,b) => a - b);
+            
+            foundPositions.forEach((pos, idx) => {
+                dashHTML += `<div class="match-card">
+                    <div class="match-pos">POS ${pos}</div>
+                    <div class="match-chars">`;
+                for(let j=0; j<pattern.length; j++) {
+                    dashHTML += `<div class="char-block"><span>${pattern[j]}</span><small>[${pos+j}]</small></div>`;
+                }
+                dashHTML += `</div></div>`;
+            });
+            
+        } else {
+            dashHTML += `<div class="summary-pill error">✗ "${pattern}" - 0 ocurrencias encontradas</div>`;
+        }
+        
+        dashHTML += `</div></div>`; // Cierra result y fm-dashboard-inner
+
+        let dash = document.getElementById('bwt-dashboard');
+        dash.innerHTML = dashHTML;
+        dash.style.display = 'block';
+    }
+
+    function nextStep() {
+        if(step>N+2) return;
+        if(step<=N) {
+            let rowStr=unsorted[step-1].str.replace(/\$/g,"<span class='eof-symbol'>$</span>");
+            document.getElementById('bwt-explanation').innerHTML=`<b>Fase 1: Rotaciones Cíclicas</b><br>Desplazando letra al final:<br><span class='bwt-text'>${rowStr}</span>`;
+            drawMatrix(); step++;
+        } else if(step===N+1) {
+            document.getElementById('bwt-explanation').innerHTML=`<b>Fase 2: Ordenamiento Lexicográfico</b><br>Ordenamos filas alfabéticamente. La <span class='match-text'>columna verde</span> inicia con $.`;
+            drawMatrix(); step++;
+        } else if(step===N+2) {
+            document.getElementById('bwt-explanation').innerHTML=`<b>Fase 3: Extracción de la BWT y Backward Search</b><br>Generando panel analítico FM-Index abajo...`;
+            drawMatrix(); 
+            buildDashboard(); // Llama al nuevo motor de UI
+            step++;
+        }
+    }
+
+    function fastForward() { while(step<=N+2) nextStep(); }
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ============================================================
+   INIT ALL ON LOAD
+   ============================================================ */
+window.onload = () => {
+    SW.init();
+    NW.init();
+    BWT.init();
+};
+</script>
+</body>
+</html>
