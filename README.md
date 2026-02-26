@@ -104,7 +104,7 @@ Las posiciones de ocurrencias se obtienen del **Suffix Array** en el rango `[top
 
 ```
 genomx-visualizer/
-├── genomx_visualizer.html          # Aplicación (versión limpia para ejecución)
+├── index.html          # Aplicación (versión limpia para ejecución)
 ├── genomx_visualizer_comentado.html # Código fuente con comentarios exhaustivos
 └── README.md                        # Este archivo
 ```
