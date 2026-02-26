@@ -2,7 +2,7 @@
 
 Visualizador interactivo de algoritmos fundamentales de bioinformática, implementado en HTML5 + CSS3 + JavaScript puro (sin dependencias externas).
 
-🔗 **Demo en vivo:** [Ver en GitHub Pages](https://TU-USUARIO.github.io/genomx-visualizer)
+🔗 **Demo en vivo:** [Ver en GitHub Pages](https://ivanokmc.github.io/implementaci-n-N-W-y-S-W-/)
 
 ---
 
