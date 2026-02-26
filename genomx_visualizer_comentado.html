@@ -506,8 +506,8 @@
 
     <!-- Controles: dos inputs de secuencia + indicador de puntajes -->
     <div class="controls">
-        <label>Seq 1: <input type="text" id="sw-seq1" value="ATAT" style="width:100px;"></label>
-        <label>Seq 2: <input type="text" id="sw-seq2" value="TATA" style="width:100px;"></label>
+        <label>Seq 1: <input type="text" id="sw-seq1" value="TGTTACGG" style="width:100px;"></label>
+        <label>Seq 2: <input type="text" id="sw-seq2" value="GGTTGACTA" style="width:100px;"></label>
         <!-- M=Match, MM=Mismatch, G=Gap -->
         <small style="margin-left:15px;">M: <span class="match-text">+1</span> | MM: <span class="mismatch-text">-1</span> | G: <span class="gap-text">-1</span></small>
     </div><br>
@@ -632,8 +632,8 @@ const SW = (() => {
        el estado para una nueva ejecución.
        ------------------------------------------ */
     function init() {
-        seq1 = document.getElementById('sw-seq1').value.toUpperCase().trim() || "ATAT";
-        seq2 = document.getElementById('sw-seq2').value.toUpperCase().trim() || "TATA";
+        seq1 = document.getElementById('sw-seq1').value.toUpperCase().trim() || "TGTTACGG";
+        seq2 = document.getElementById('sw-seq2').value.toUpperCase().trim() || "GGTTGACTA";
 
         // Crear matriz (seq1.len+1) × (seq2.len+1) inicializada en 0
         matrix  = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(0));
