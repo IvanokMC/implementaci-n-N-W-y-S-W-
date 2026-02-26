@@ -1,0 +1,1311 @@
+<!DOCTYPE html>
+<!--
+  ================================================================
+  GENOMX VISUALIZER - Visualizador de Algoritmos de Bioinformática
+  ================================================================
+  Aplicación web de una sola página (SPA) que implementa y visualiza
+  paso a paso tres algoritmos fundamentales de bioinformática:
+
+    1. Smith-Waterman   → Alineamiento LOCAL de secuencias
+    2. Needleman-Wunsch → Alineamiento GLOBAL de secuencias
+    3. BWT + FM-Index   → Transformada de Burrows-Wheeler y búsqueda exacta
+
+  Tecnologías: HTML5 puro + CSS3 + JavaScript vanilla (sin dependencias externas)
+  Tema visual:  Tokyo Night (paleta de colores oscura)
+
+  Autor: Bioinformática - Práctica 1
+  ================================================================
+-->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>GenomX Visualizer - Bioinformática</title>
+    <style>
+        /* ================================================================
+           VARIABLES GLOBALES DE COLOR - Tema "Tokyo Night"
+           Se definen con Custom Properties (--nombre) para poder reutilizarlas
+           en toda la hoja de estilos de forma consistente.
+           ================================================================ */
+        :root {
+            --bg:            #1a1b26;   /* Fondo principal oscuro */
+            --bg-alt:        #24283b;   /* Fondo alternativo (paneles, tarjetas) */
+            --fg:            #c0caf5;   /* Texto principal (blanco-azulado) */
+            --border:        #414868;   /* Color de bordes y separadores */
+            --primary:       #7aa2f7;   /* Azul primario (títulos, énfasis) */
+            --primary-hover: #89ddff;   /* Azul más claro (hover, links) */
+            --success:       #9ece6a;   /* Verde (matches, éxito, NW) */
+            --danger:        #f7768e;   /* Rojo/rosa (mismatches, gaps, SW) */
+            --warning:       #e0af68;   /* Naranja/dorado (advertencias, BWT) */
+            --highlight:     #bb9af7;   /* Violeta (celda activa en cálculo) */
+            --info:          #0db9d7;   /* Cian (información adicional) */
+        }
+
+        /* Reset básico: incluye padding y borde en el ancho total de cada elemento */
+        * { box-sizing: border-box; }
+
+        /* Estilo base del cuerpo: fuente sans-serif, fondo y color de la paleta */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--fg);
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        /* ================================================================
+           BARRA DE NAVEGACIÓN (NAVBAR)
+           Sticky: permanece visible al hacer scroll.
+           Contiene el logo y los botones de cada pestaña/algoritmo.
+           ================================================================ */
+        .navbar {
+            background-color: var(--bg-alt);
+            border-bottom: 2px solid var(--border);
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            position: sticky;     /* Fija la barra al tope de la ventana */
+            top: 0;
+            z-index: 100;         /* Garantiza que esté encima de todo contenido */
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            flex-wrap: wrap;      /* Responsive: los botones bajan a nueva línea en pantallas pequeñas */
+        }
+
+        /* Logo / nombre de la app en la navbar */
+        .navbar-brand {
+            color: var(--primary);
+            font-size: 18px;
+            font-weight: bold;
+            padding: 14px 16px;
+            border-right: 1px solid var(--border); /* Separador visual del logo */
+            letter-spacing: 1px;
+        }
+
+        /* Botones de pestaña (tabs) en la navbar */
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--fg);
+            opacity: 0.5;         /* Inactivo: semitransparente */
+            padding: 16px 15px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-bottom: 3px solid transparent; /* Se coloreará cuando esté activo */
+            margin-bottom: -2px;  /* Compensa el borde inferior del navbar */
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn:hover { opacity: 0.9; color: var(--primary-hover); }
+        .tab-btn.active { opacity: 1; } /* Pestaña activa: totalmente visible */
+
+        /* Colores únicos para cada pestaña cuando está activa */
+        .tab-btn[data-tab="sw"].active  { color: var(--danger);  border-bottom-color: var(--danger); }   /* SW: rojo */
+        .tab-btn[data-tab="nw"].active  { color: var(--success); border-bottom-color: var(--success); }  /* NW: verde */
+        .tab-btn[data-tab="bwt"].active { color: var(--warning); border-bottom-color: var(--warning); }  /* BWT: naranja */
+
+        /* ================================================================
+           PANELES DE CONTENIDO (Tabs)
+           Solo el panel con clase .active se muestra. La animación fadeIn
+           proporciona una transición suave al cambiar de pestaña.
+           ================================================================ */
+        .tab-panel { display: none; padding: 20px; animation: fadeIn 0.3s ease; }
+        .tab-panel.active { display: block; }
+
+        /* Animación de entrada al mostrar un panel */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Títulos generales */
+        h2 { color: var(--primary); margin-top: 0; }
+        h3 { color: var(--success); }
+
+        /* ================================================================
+           PANEL DE CONTROLES (inputs + botones)
+           Contiene los campos de texto para ingresar secuencias/patrones.
+           ================================================================ */
+        .controls {
+            background-color: var(--bg-alt);
+            padding: 20px;
+            border-radius: 10px;
+            display: inline-block;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* Campos de texto para las secuencias */
+        .controls input {
+            background-color: var(--bg);
+            color: var(--fg);
+            border: 1px solid var(--border);
+            padding: 8px;
+            border-radius: 5px;
+            text-transform: uppercase; /* Fuerza mayúsculas (ADN usa ACTG) */
+            font-weight: bold;
+            margin: 0 10px;
+            text-align: center;
+        }
+
+        /* Botones de acción (Paso a Paso, Completar, Reiniciar) */
+        .ctrl-btn {
+            background-color: var(--primary);
+            color: var(--bg);
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .ctrl-btn:hover { background-color: var(--primary-hover); transform: scale(1.05); }
+
+        /* ================================================================
+           CAJA DE EXPLICACIÓN
+           Muestra el estado actual del cálculo al usuario.
+           Borde izquierdo colorido para identificación rápida.
+           ================================================================ */
+        .explanation-box {
+            background-color: var(--bg-alt);
+            padding: 15px;
+            margin: 10px auto;
+            width: 90%;
+            max-width: 800px;
+            border-radius: 8px;
+            border-left: 5px solid var(--primary);
+            font-family: monospace;
+            font-size: 15px;
+            text-align: left;
+            min-height: 80px;
+            line-height: 1.5;
+        }
+
+        /* ================================================================
+           CONTENEDOR DE LA MATRIZ
+           Permite scroll horizontal para matrices grandes (secuencias largas)
+           ================================================================ */
+        .matrix-wrapper {
+            overflow-x: auto;
+            margin: 20px auto;
+            max-width: 95%;
+            padding-bottom: 10px;
+        }
+
+        /* Estilo base de todas las tablas */
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+            background-color: var(--bg-alt);
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        td, th {
+            border: 1px solid var(--border);
+            position: relative;  /* Necesario para posicionar los mini-valores dentro */
+            text-align: center;
+        }
+
+        th { background-color: #16161e; color: var(--primary); font-size: 16px; padding: 10px; }
+
+        /* ================================================================
+           CELDAS DE ALINEAMIENTO (Smith-Waterman y Needleman-Wunsch)
+           Cada celda es de tamaño fijo y contiene:
+           - El valor principal (v-max) centrado y grande
+           - Tres mini-valores en las esquinas mostrando de dónde viene (↖↑←)
+           ================================================================ */
+        .aln-cell { width: 110px; height: 90px; }
+
+        /* Valor principal grande en el centro de la celda */
+        .v-max {
+            font-size: 26px;
+            font-weight: bold;
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1;
+        }
+
+        /* Mini-valores que muestran las 3 opciones de cada celda (diagonal, arriba, izquierda) */
+        .mini-val {
+            position: absolute;
+            font-size: 11px;
+            color: var(--fg);
+            opacity: 0.3;       /* Gris por defecto */
+            font-weight: normal;
+            white-space: nowrap;
+        }
+
+        /* El mini-valor elegido (el máximo) se resalta en naranja */
+        .mini-val.chosen {
+            opacity: 1;
+            color: var(--warning);
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(224, 175, 104, 0.4);
+            z-index: 2;
+        }
+
+        /* Posicionamiento absoluto de cada mini-valor en su esquina */
+        .v-diag { top: 4px; left: 4px; }    /* ↖ diagonal: esquina superior izquierda */
+        .v-up   { top: 4px; right: 4px; }   /* ↑  arriba: esquina superior derecha */
+        .v-left { bottom: 4px; left: 4px; } /* ← izquierda: esquina inferior izquierda */
+        .v-edge { top: 4px; left: 50%; transform: translateX(-50%); } /* Borde inicial */
+
+        /* Celda actualmente siendo calculada: efecto de brillo violeta */
+        .highlight {
+            border: 2px solid var(--highlight) !important;
+            box-shadow: inset 0 0 15px rgba(187, 154, 247, 0.2), 0 0 15px rgba(187, 154, 247, 0.6) !important;
+            transform: scale(1.05);
+            z-index: 10;
+            background-color: #292e42 !important;
+        }
+
+        /* Celda que forma parte del camino óptimo (traceback): borde rojo */
+        .path-cell {
+            box-shadow: inset 0 0 0 3px var(--danger), inset 0 0 15px rgba(247, 118, 142, 0.3) !important;
+            background-color: rgba(247, 118, 142, 0.15) !important;
+            z-index: 5;
+        }
+
+        /* ================================================================
+           CELDAS DE LA MATRIZ BWT
+           Más pequeñas que las de alineamiento (solo muestran un caracter)
+           ================================================================ */
+        .bwt-cell { width: 45px; height: 45px; font-size: 20px; font-weight: bold; font-family: monospace; }
+
+        /* Columna F (primera columna de la matriz BWT ordenada): borde verde */
+        .first-col {
+            background-color: rgba(158, 206, 106, 0.15) !important;
+            box-shadow: inset 0 0 0 2px var(--success);
+            color: var(--success);
+        }
+
+        /* Columna L (última columna = BWT): borde rojo, es el resultado */
+        .last-col {
+            background-color: rgba(247, 118, 142, 0.15) !important;
+            box-shadow: inset 0 0 0 3px var(--danger);
+            color: var(--danger);
+            z-index: 5;
+            position: relative;
+        }
+
+        /* Fila recién añadida en la Fase 1 (rotaciones): fondo violeta */
+        .highlight-row {
+            background-color: rgba(187, 154, 247, 0.2) !important;
+            box-shadow: inset 0 0 10px rgba(187, 154, 247, 0.5);
+        }
+
+        /* El símbolo '$' (fin de cadena) se muestra en azul primario */
+        .eof-symbol { color: var(--primary); font-weight: 900; }
+
+        /* ================================================================
+           CAJAS DE RESULTADOS (Smith-Waterman y Needleman-Wunsch)
+           Se muestran solo cuando el cálculo termina (display: none por defecto)
+           ================================================================ */
+        .result-box {
+            display: none;
+            margin: 30px auto;
+            background-color: #16161e;
+            padding: 20px;
+            border-radius: 10px;
+            width: fit-content;
+            min-width: 400px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .solution-item {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px dashed var(--border);
+        }
+        .solution-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+
+        /* Título de cada solución (ej: "Solución 1", "Solución 2") */
+        .solution-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+
+        /* Contenedor del alineamiento visual (las dos secuencias + los pipes) */
+        .alignment-container {
+            font-family: monospace;
+            font-size: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .seq-row, .pipe-row { display: flex; justify-content: center; }
+        .seq-row span, .pipe-row span { width: 30px; text-align: center; }
+
+        /* Los pipes '|' de match se muestran en verde */
+        .pipe-row span { color: var(--success); font-weight: bold; }
+
+        /* Clases para colorear cada tipo de resultado en el alineamiento */
+        .match-text    { color: var(--success); } /* Match: verde */
+        .mismatch-text { color: var(--danger);  } /* Mismatch: rojo */
+        .gap-text      { color: var(--warning); } /* Gap '-': naranja */
+        .bwt-text      { color: var(--warning); font-weight: bold; } /* texto BWT */
+
+        /* ================================================================
+           DASHBOARD FM-INDEX (panel completo de resultados BWT)
+           Muestra la BWT resultante, tablas C y OCC, y el Backward Search
+           ================================================================ */
+        #bwt-dashboard {
+            display: none; /* Se activa con JS cuando finaliza el BWT */
+            margin: 30px auto;
+            background-color: var(--bg-alt);
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 1000px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-top: 4px solid var(--success); /* Línea de acento verde en la parte superior */
+            text-align: left;
+        }
+
+        /* Contenedor interno con espaciado entre secciones */
+        .fm-dashboard-inner { display: flex; flex-direction: column; gap: 30px; }
+
+        /* Barra superior con "BWT = ..." y "SA = ..." */
+        .fm-header-bar {
+            display: flex; gap: 20px; font-family: monospace;
+            font-size: 18px; justify-content: center; flex-wrap: wrap;
+        }
+        .fm-header-pill {
+            border: 1px solid var(--success); padding: 10px 20px;
+            border-radius: 6px; background: rgba(158, 206, 106, 0.1);
+            color: var(--fg); box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        /* Contenedor de las tablas C y OCC lado a lado */
+        .fm-tables { display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; }
+
+        .fm-table-wrap h4 {
+            color: var(--success); margin-top: 0; margin-bottom: 15px;
+            font-family: 'Segoe UI', sans-serif; text-align: left;
+            border-bottom: 1px solid var(--border); padding-bottom: 5px;
+        }
+
+        /* Tablas C y OCC: fuente monoespaciada para alinear columnas */
+        .fm-table { font-family: monospace; font-size: 15px; margin: 0; background: var(--bg); box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+        .fm-table th { background: #16161e; color: var(--primary); padding: 8px 15px; }
+        .fm-table td { padding: 8px 15px; text-align: center; border: 1px solid var(--border); }
+
+        /* Sección Backward Search: fondo más oscuro para destacar */
+        .fm-bs { background: #16161e; padding: 25px; border-radius: 8px; border: 1px solid var(--border); }
+        .fm-bs h4 { color: var(--success); margin-top: 0; font-family: 'Segoe UI', sans-serif; font-size: 18px; margin-bottom: 10px; }
+        .fm-formula { color: var(--fg); opacity: 0.8; font-family: monospace; margin-bottom: 20px; font-size: 15px; }
+
+        /* Cada paso del Backward Search */
+        .bs-step {
+            background: var(--bg-alt); padding: 15px 20px; border-radius: 8px;
+            margin-bottom: 15px; border-left: 5px solid var(--success);
+            display: flex; gap: 20px; align-items: center;
+            font-family: monospace; font-size: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        /* Paso inicial: borde naranja */
+        .bs-step.inicio { border-left-color: var(--warning); background: rgba(224, 175, 104, 0.05); padding: 12px 20px; font-weight: bold; }
+
+        /* Pill que muestra el rango [top, bot] actual */
+        .range-pill {
+            border: 1px solid var(--warning); color: var(--warning);
+            padding: 3px 8px; border-radius: 4px;
+            background: rgba(224, 175, 104, 0.15); font-weight: bold;
+        }
+
+        /* Badge verde con el carácter siendo procesado en Backward Search */
+        .char-badge {
+            background: var(--success); color: var(--bg);
+            min-width: 40px; height: 40px; display: flex;
+            align-items: center; justify-content: center;
+            font-weight: bold; border-radius: 6px; font-size: 22px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .char-details { display: flex; flex-direction: column; gap: 8px; line-height: 1.4; width: 100%; }
+
+        /* Sección de resultado final del Backward Search */
+        .fm-results { margin-top: 10px; }
+        .fm-results h4 {
+            color: var(--success); font-family: 'Segoe UI', sans-serif;
+            font-size: 18px; margin-bottom: 15px;
+            border-bottom: 1px solid var(--border); padding-bottom: 5px;
+        }
+
+        /* Pill resumen de ocurrencias encontradas */
+        .summary-pill {
+            border: 1px solid var(--success); color: var(--success);
+            padding: 12px 25px; border-radius: 25px; display: inline-block;
+            font-weight: bold; margin-bottom: 25px;
+            background: rgba(158, 206, 106, 0.1); font-size: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .summary-pill.error { border-color: var(--danger); color: var(--danger); background: rgba(247, 118, 142, 0.1); }
+
+        /* Tarjeta de cada ocurrencia encontrada */
+        .match-card {
+            background: rgba(158, 206, 106, 0.05);
+            border: 1px solid rgba(158, 206, 106, 0.3);
+            padding: 15px 25px; border-radius: 8px; margin-bottom: 15px;
+            display: flex; align-items: center; gap: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2); width: fit-content;
+        }
+        .match-pos { font-weight: bold; color: var(--success); font-size: 15px; letter-spacing: 1px; min-width: 60px; font-family: monospace; }
+        .match-chars { display: flex; gap: 12px; }
+
+        /* Bloque visual para cada carácter del patrón encontrado */
+        .char-block {
+            display: flex; flex-direction: column; align-items: center;
+            background: var(--success); color: var(--bg); border-radius: 6px;
+            padding: 6px 12px; font-weight: bold; font-size: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .char-block small { font-size: 12px; opacity: 0.9; margin-top: 4px; font-family: monospace; font-weight: bold; }
+
+        /* Scrollbar personalizado para tema oscuro */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-alt); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+    </style>
+</head>
+<body>
+
+<!-- ================================================================
+     BARRA DE NAVEGACIÓN
+     Tres botones: uno por cada algoritmo implementado.
+     onclick llama a la función showTab() definida en el JS.
+     ================================================================ -->
+<nav class="navbar">
+    <div class="navbar-brand">🧬 GenomX Visualizer</div>
+    <!-- data-tab se usa en JS para aplicar el color correcto al botón activo -->
+    <button class="tab-btn active" data-tab="sw"  onclick="showTab('sw')">Smith-Waterman</button>
+    <button class="tab-btn"        data-tab="nw"  onclick="showTab('nw')">Needleman-Wunsch</button>
+    <button class="tab-btn"        data-tab="bwt" onclick="showTab('bwt')">Burrows-Wheeler (BWT)</button>
+</nav>
+
+<!-- ================================================================
+     PANEL 1: SMITH-WATERMAN (Alineamiento Local)
+     id="panel-sw" es mostrado/ocultado por showTab()
+     ================================================================ -->
+<div id="panel-sw" class="tab-panel active">
+    <h2>Smith-Waterman (Alineamiento Local Multi-Solución)</h2>
+
+    <!-- Controles: dos inputs de secuencia + indicador de puntajes -->
+    <div class="controls">
+        <label>Seq 1: <input type="text" id="sw-seq1" value="ATAT" style="width:100px;"></label>
+        <label>Seq 2: <input type="text" id="sw-seq2" value="TATA" style="width:100px;"></label>
+        <!-- M=Match, MM=Mismatch, G=Gap -->
+        <small style="margin-left:15px;">M: <span class="match-text">+1</span> | MM: <span class="mismatch-text">-1</span> | G: <span class="gap-text">-1</span></small>
+    </div><br>
+
+    <!-- Botones de control: llaman al módulo SW (IIFE) -->
+    <button class="ctrl-btn" onclick="SW.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="SW.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="SW.reset()">Reiniciar</button>
+
+    <!-- Texto descriptivo del paso actual -->
+    <div id="sw-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar el cálculo.</div>
+
+    <!-- Contenedor donde se inyecta la tabla/matriz HTML -->
+    <div class="matrix-wrapper"><div id="sw-matrix"></div></div>
+
+    <!-- Caja de resultados: se muestra al finalizar el cálculo -->
+    <div id="sw-alignment-box" class="result-box" style="border: 1px solid var(--border);">
+        <h3>Rutas Locales Óptimas</h3>
+        <div id="sw-alignment-result" style="max-height: 400px; overflow-y: auto;"></div>
+    </div>
+</div>
+
+<!-- ================================================================
+     PANEL 2: NEEDLEMAN-WUNSCH (Alineamiento Global)
+     ================================================================ -->
+<div id="panel-nw" class="tab-panel">
+    <h2>Needleman-Wunsch (Alineamiento Global)</h2>
+
+    <div class="controls">
+        <label>Seq 1: <input type="text" id="nw-seq1" value="ACGTGA"  style="width:120px;"></label>
+        <label>Seq 2: <input type="text" id="nw-seq2" value="ACTAGA" style="width:120px;"></label>
+        <small style="margin-left:15px;">M: <span class="match-text">+1</span> | MM: <span class="mismatch-text">-1</span> | G: <span class="gap-text">-1</span></small>
+    </div><br>
+
+    <button class="ctrl-btn" onclick="NW.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="NW.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="NW.reset()">Reiniciar</button>
+
+    <div id="nw-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar el cálculo.</div>
+    <div class="matrix-wrapper"><div id="nw-matrix"></div></div>
+
+    <!-- Muestra el alineamiento final con los pipes '|' entre secuencias -->
+    <div id="nw-alignment-box" class="result-box" style="border: 1px solid var(--success);">
+        <h3>Alineamiento Global (Traceback)</h3>
+        <div class="alignment-container" id="nw-alignment-result"></div>
+    </div>
+</div>
+
+<!-- ================================================================
+     PANEL 3: BURROWS-WHEELER TRANSFORM (BWT) + FM-INDEX
+     ================================================================ -->
+<div id="panel-bwt" class="tab-panel">
+    <h2>Transformada de Burrows-Wheeler (BWT) &amp; FM-Index</h2>
+
+    <div class="controls">
+        <label>Texto a transformar: <input type="text" id="bwt-input"   value="BANANA" style="width:150px; letter-spacing:2px;"></label><br><br>
+        <label>Patrón a buscar:     <input type="text" id="bwt-pattern" value="ANA"    style="width:100px; text-transform:uppercase;"></label><br><br>
+        <!-- El símbolo '$' se añade automáticamente en el JS como marcador de fin -->
+        <small>El marcador <b class="eof-symbol">$</b> se añadirá automáticamente.</small>
+    </div><br>
+
+    <button class="ctrl-btn" onclick="BWT.nextStep()">Paso a Paso</button>
+    <button class="ctrl-btn" onclick="BWT.fastForward()">Completar Todo</button>
+    <button class="ctrl-btn" onclick="BWT.reset()">Reiniciar</button>
+
+    <div id="bwt-explanation" class="explanation-box">Haz clic en "Siguiente Paso" para comenzar a generar la matriz.</div>
+    <div class="matrix-wrapper"><div id="bwt-matrix"></div></div>
+
+    <!-- Dashboard con tablas C, OCC y resultado del Backward Search -->
+    <div id="bwt-dashboard"></div>
+</div>
+
+<script>
+/* ================================================================
+   FUNCIÓN showTab(name)
+   Cambia la pestaña/panel visible.
+   1. Remueve la clase 'active' de todos los paneles y botones.
+   2. Agrega 'active' al panel e id del tab seleccionado.
+   ================================================================ */
+function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    document.querySelector(`.tab-btn[data-tab="${name}"]`).classList.add('active');
+}
+
+/* ================================================================
+   MÓDULO SMITH-WATERMAN (SW)
+   Patrón IIFE (Immediately Invoked Function Expression) para
+   encapsular el estado y evitar contaminar el scope global.
+
+   ALGORITMO:
+   El alineamiento LOCAL busca la subsecuencia más similar entre
+   dos cadenas. A diferencia de NW, los valores no pueden bajar de 0
+   (se "reinician"), lo que permite identificar regiones homólogas.
+
+   Puntuación: Match=+1, Mismatch=-1, Gap=-1
+
+   FÓRMULA DE RECURRENCIA:
+   H(i,j) = max(0, H(i-1,j-1)+s(i,j), H(i-1,j)-gap, H(i,j-1)-gap)
+
+   La solución se encuentra trazando desde TODAS las celdas con
+   valor máximo global hacia atrás hasta llegar a una celda con 0.
+   ================================================================ */
+const SW = (() => {
+    // Parámetros de puntuación (fijos)
+    const MATCH = 1, MISMATCH = -1, GAP = -1;
+
+    // Paleta de colores para distinguir múltiples soluciones óptimas
+    const palette = ['#f7768e','#9ece6a','#7aa2f7','#e0af68','#bb9af7','#7dcfff'];
+
+    // Estado interno del módulo
+    let seq1, seq2;     // Secuencias ingresadas por el usuario
+    let matrix;         // Matriz de puntuaciones H(i,j)
+    let details;        // Detalles de cada celda (de dónde viene, qué opción se eligió)
+    let step;           // Contador del paso actual
+    let pathMap;        // Mapa de celdas que pertenecen a cada ruta óptima
+
+    /* ------------------------------------------
+       init(): Lee las secuencias del DOM,
+       inicializa la matriz con ceros y resetea
+       el estado para una nueva ejecución.
+       ------------------------------------------ */
+    function init() {
+        seq1 = document.getElementById('sw-seq1').value.toUpperCase().trim() || "ATAT";
+        seq2 = document.getElementById('sw-seq2').value.toUpperCase().trim() || "TATA";
+
+        // Crear matriz (seq1.len+1) × (seq2.len+1) inicializada en 0
+        matrix  = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(0));
+        details = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(null));
+        pathMap = {};
+
+        // SW: los bordes (fila 0 y columna 0) se inicializan en 0 (a diferencia de NW)
+        for(let i=0; i<=seq1.length; i++) matrix[i][0] = 0;
+        for(let j=0; j<=seq2.length; j++) matrix[0][j] = 0;
+
+        step = 1;
+        document.getElementById('sw-explanation').innerHTML = "Bordes inicializados en 0.<br>Haz clic en 'Paso a Paso'.";
+        document.getElementById('sw-alignment-box').style.display = 'none';
+        drawMatrix();
+    }
+
+    /* ------------------------------------------
+       drawMatrix(hI, hJ): Genera el HTML de la
+       tabla y lo inyecta en el DOM.
+       hI, hJ: fila/columna de la celda activa
+       (se resalta con la clase 'highlight').
+       ------------------------------------------ */
+    function drawMatrix(hI=-1, hJ=-1) {
+        // Cabecera: fila con los caracteres de seq2
+        let html = '<table><tr><th></th><th>-</th>';
+        for(let j=0; j<seq2.length; j++) html += '<th>'+seq2[j]+'</th>';
+        html += '</tr>';
+
+        for(let i=0; i<=seq1.length; i++) {
+            html += '<tr>';
+            // Columna de encabezado: '-' para la fila 0, o el carácter de seq1
+            html += i===0 ? '<th>-</th>' : '<th>'+seq1[i-1]+'</th>';
+
+            for(let j=0; j<=seq2.length; j++) {
+                let hCls = (i===hI && j===hJ) ? 'highlight' : '';
+                let key  = i+'-'+j;
+                let cellStyle = '';
+
+                // Si esta celda pertenece a alguna ruta óptima, colorearla
+                if(pathMap[key] && pathMap[key].length > 0) {
+                    let sols = pathMap[key];
+                    if(sols.length === 1) {
+                        // Una sola ruta: fondo sólido con el color de esa ruta
+                        let c = palette[sols[0] % palette.length];
+                        cellStyle = `box-shadow:inset 0 0 0 3px ${c},inset 0 0 15px ${c}40;background-color:${c}33;z-index:5;`;
+                    } else {
+                        // Múltiples rutas se superponen: gradiente con todos los colores
+                        let shadows=[], gradStops=[], pct=100/sols.length;
+                        sols.forEach((sIdx, idx) => {
+                            let c = palette[sIdx % palette.length];
+                            shadows.push(`inset 0 0 0 ${(idx+1)*3}px ${c}`);
+                            gradStops.push(`${c}40 ${idx*pct}%`, `${c}40 ${(idx+1)*pct}%`);
+                        });
+                        cellStyle = `box-shadow:${shadows.join(',')};background:linear-gradient(135deg,${gradStops.join(',')});z-index:5;`;
+                    }
+                }
+
+                html += `<td class='aln-cell ${hCls}' style='${cellStyle}'>`;
+
+                if(i===0 || j===0) {
+                    // Celdas de borde: solo el valor (siempre 0 en SW)
+                    html += `<div class='v-max'>${matrix[i][j]}</div>`;
+                } else if(details[i][j]) {
+                    let d = details[i][j], zero = (d.max === 0);
+                    // Mostrar los tres candidatos: el elegido en naranja
+                    html += `<div class='mini-val v-diag ${(!zero && d.diag===d.max)?"chosen":""}'>↖ ${d.diagStr}=${d.diag}</div>`;
+                    html += `<div class='mini-val v-up   ${(!zero && d.up  ===d.max)?"chosen":""}'>↑ ${d.upStr}=${d.up}</div>`;
+                    html += `<div class='mini-val v-left ${(!zero && d.left===d.max)?"chosen":""}'>← ${d.leftStr}=${d.left}</div>`;
+                    html += `<div class='v-max'>${d.max}</div>`;
+                }
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        document.getElementById('sw-matrix').innerHTML = html;
+    }
+
+    /* ------------------------------------------
+       showAlignment(): Traceback recursivo.
+       Encuentra TODAS las rutas óptimas desde
+       cada celda con el valor máximo global.
+       Usa recursión (DFS) para explorar todas
+       las ramas posibles del traceback.
+       ------------------------------------------ */
+    function showAlignment() {
+        let maxScore = 0, startCells = [], allAlignments = [];
+        pathMap = {};
+
+        // Paso 1: encontrar el score máximo global
+        for(let i=0; i<=seq1.length; i++)
+            for(let j=0; j<=seq2.length; j++)
+                if(matrix[i][j] > maxScore) maxScore = matrix[i][j];
+
+        if(maxScore === 0) return; // Sin alineamiento significativo
+
+        // Paso 2: recopilar TODAS las celdas con ese valor máximo
+        for(let i=0; i<=seq1.length; i++)
+            for(let j=0; j<=seq2.length; j++)
+                if(matrix[i][j] === maxScore) startCells.push({i, j});
+
+        /* Función recursiva: explora todas las rutas de traceback
+           desde la celda (i,j) hasta llegar a una celda con valor 0.
+           a1, p, a2: arrays que acumulan el alineamiento.
+           cells: celdas visitadas en esta ruta (para colorearlas). */
+        function explorePath(i, j, a1, p, a2, cells) {
+            if(matrix[i][j] === 0) {
+                // Ruta completa: registrar alineamiento y colorear celdas
+                let sIdx = allAlignments.length, color = palette[sIdx % palette.length];
+                allAlignments.push({a1, p, a2, color});
+                cells.forEach(cell => {
+                    let k = cell.i+'-'+cell.j;
+                    if(!pathMap[k]) pathMap[k] = [];
+                    if(!pathMap[k].includes(sIdx)) pathMap[k].push(sIdx);
+                });
+                return;
+            }
+            let d=details[i][j], c1=seq1[i-1], c2=seq2[j-1], m=(c1===c2);
+            // Explorar cada dirección válida (puede haber empates)
+            if(d.diag === d.max) explorePath(i-1, j-1, [c1,...a1], [m?'|':'&nbsp;',...p], [c2,...a2], [...cells, {i:i-1,j:j-1}]);
+            if(d.up   === d.max) explorePath(i-1, j,   [c1,...a1], ['&nbsp;',...p],          ['-',...a2], [...cells, {i:i-1,j:j}]);
+            if(d.left === d.max) explorePath(i,   j-1, ['-',...a1], ['&nbsp;',...p],          [c2,...a2], [...cells, {i:i,  j:j-1}]);
+        }
+
+        startCells.forEach(s => explorePath(s.i, s.j, [], [], [], [{i:s.i, j:s.j}]));
+
+        // Renderizar todas las soluciones encontradas
+        let html = '';
+        allAlignments.forEach((aln, idx) => {
+            html += `<div class="solution-item" style="border-bottom-color:${aln.color}66">`;
+            html += `<div class="solution-title" style="color:${aln.color}">Solución ${idx+1}</div>`;
+            html += `<div class='alignment-container'>`;
+            html += `<div class='seq-row'>`+aln.a2.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `<div class='pipe-row'>`+aln.p.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `<div class='seq-row'>`+aln.a1.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+            html += `</div></div>`;
+        });
+        document.getElementById('sw-alignment-result').innerHTML = html;
+        document.getElementById('sw-alignment-box').style.display = 'block';
+    }
+
+    /* ------------------------------------------
+       nextStep(): Avanza UN paso del cálculo.
+       Calcula H(i,j) para la celda actual según
+       la fórmula de Smith-Waterman.
+       Al finalizar, llama a showAlignment().
+       ------------------------------------------ */
+    function nextStep() {
+        let total = seq1.length * seq2.length;
+
+        if(step > total) {
+            if(step === total + 1) {
+                document.getElementById('sw-explanation').innerHTML =
+                    "<span class='match-text'>¡Matriz completada!</span> Pintando <b class='mismatch-text'>TODAS</b> las rutas posibles...";
+                showAlignment();
+                drawMatrix();
+                step++;
+            }
+            return;
+        }
+
+        // Convertir el contador lineal 'step' a coordenadas (i, j) en la matriz
+        let i = Math.floor((step-1) / seq2.length) + 1;
+        let j = ((step-1) % seq2.length) + 1;
+
+        let c1=seq1[i-1], c2=seq2[j-1];
+        let isM = (c1 === c2);
+        let score = isM ? MATCH : MISMATCH;
+
+        // Calcular los 3 candidatos + la opción de reinicio (SW característica)
+        let diag = matrix[i-1][j-1] + score; // ↖ diagonal
+        let up   = matrix[i-1][j]   + GAP;   // ↑  arriba
+        let left = matrix[i][j-1]   + GAP;   // ← izquierda
+
+        // CLAVE SW: el valor mínimo es 0 (no se permiten valores negativos)
+        let maxVal = Math.max(0, diag, up, left);
+        matrix[i][j] = maxVal;
+
+        // Guardar detalles para mostrar en la celda y para el traceback
+        details[i][j] = {
+            diag, up, left, max: maxVal,
+            diagStr: `${matrix[i-1][j-1]}${score>=0?'+'+score:score}`,
+            upStr:   `${matrix[i-1][j]}${GAP>=0?'+'+GAP:GAP}`,
+            leftStr: `${matrix[i][j-1]}${GAP>=0?'+'+GAP:GAP}`
+        };
+
+        let sT = isM
+            ? `<span class='match-text'>+${MATCH}</span>`
+            : `<span class='mismatch-text'>${MISMATCH}</span>`;
+
+        document.getElementById('sw-explanation').innerHTML = `
+            Calculando <b>(${i},${j})</b> | <b>${c1}</b> vs <b>${c2}</b><br>
+            ↖ Diagonal: ${matrix[i-1][j-1]} ${sT} = <b>${diag}</b> | ↑ Arriba: <b>${up}</b> | ← Izquierda: <b>${left}</b><br>
+            Max: ${maxVal===0 ? `<span class='reset-text'>0 (Reinicio)</span>` : `<b class='warning'>${maxVal}</b>`}`;
+
+        drawMatrix(i, j);
+        step++;
+    }
+
+    /* fastForward(): Avanza todos los pasos restantes de una vez */
+    function fastForward() {
+        let t = seq1.length * seq2.length;
+        while(step <= t+1) nextStep();
+    }
+
+    // Exponer solo las funciones públicas del módulo
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ================================================================
+   MÓDULO NEEDLEMAN-WUNSCH (NW)
+   Encapsulado con IIFE igual que SW.
+
+   ALGORITMO:
+   El alineamiento GLOBAL alinea las dos secuencias COMPLETAS de
+   extremo a extremo. A diferencia de SW, los valores SÍ pueden
+   ser negativos (no hay reinicio a 0). Los bordes se inicializan
+   con penalizaciones de gap acumuladas.
+
+   FÓRMULA DE RECURRENCIA:
+   F(i,j) = max(F(i-1,j-1)+s(i,j), F(i-1,j)+gap, F(i,j-1)+gap)
+
+   El traceback comienza SIEMPRE en la esquina inferior derecha
+   F(m,n) y termina en F(0,0). Solo hay una solución óptima
+   (o empates que se resuelven por prioridad de dirección).
+   ================================================================ */
+const NW = (() => {
+    const MATCH = 1, MISMATCH = -1, GAP = -1;
+    let seq1, seq2, matrix, details, step, pathCoords;
+
+    /* init(): Inicializa la matriz con los valores de borde.
+       Los bordes en NW son penalizaciones acumuladas de gap:
+       F(i,0) = i * GAP y F(0,j) = j * GAP */
+    function init() {
+        seq1 = document.getElementById('nw-seq1').value.toUpperCase().trim() || "ACGTGA";
+        seq2 = document.getElementById('nw-seq2').value.toUpperCase().trim() || "ACTAGA";
+
+        matrix  = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(0));
+        details = Array(seq1.length+1).fill(null).map(() => Array(seq2.length+1).fill(null));
+        pathCoords = [];
+
+        // Inicializar primera columna: penalizaciones crecientes por gap
+        for(let i=0; i<=seq1.length; i++) {
+            matrix[i][0] = i * GAP;
+            if(i > 0) details[i][0] = {
+                isEdge: true, type: 'up',
+                str: `${matrix[i-1][0]}${GAP>=0?'+'+GAP:GAP}=${matrix[i][0]}`
+            };
+        }
+        // Inicializar primera fila: penalizaciones crecientes por gap
+        for(let j=0; j<=seq2.length; j++) {
+            matrix[0][j] = j * GAP;
+            if(j > 0) details[0][j] = {
+                isEdge: true, type: 'left',
+                str: `${matrix[0][j-1]}${GAP>=0?'+'+GAP:GAP}=${matrix[0][j]}`
+            };
+        }
+
+        step = 1;
+        document.getElementById('nw-explanation').innerHTML = "Matrices inicializadas.<br>Haz clic en 'Paso a Paso'.";
+        document.getElementById('nw-alignment-box').style.display = 'none';
+        drawMatrix();
+    }
+
+    /* drawMatrix(): Similar a SW pero sin pathMap (NW tiene una sola ruta).
+       Usa el array pathCoords para marcar la ruta del traceback. */
+    function drawMatrix(hI=-1, hJ=-1) {
+        let html = '<table><tr><th></th><th>-</th>';
+        for(let j=0; j<seq2.length; j++) html += '<th>'+seq2[j]+'</th>';
+        html += '</tr>';
+
+        for(let i=0; i<=seq1.length; i++) {
+            html += '<tr>';
+            html += i===0 ? '<th>-</th>' : '<th>'+seq1[i-1]+'</th>';
+
+            for(let j=0; j<=seq2.length; j++) {
+                // Verificar si esta celda está en el camino óptimo (traceback)
+                let pCls = pathCoords.some(c => c.i===i && c.j===j) ? 'path-cell' : '';
+                let hCls = (i===hI && j===hJ) ? 'highlight' : '';
+
+                html += `<td class='aln-cell ${hCls} ${pCls}'>`;
+                if(i===0 && j===0) {
+                    html += `<div class='v-max'>${matrix[i][j]}</div>`;
+                } else if(details[i][j] && details[i][j].isEdge) {
+                    // Celdas de borde: mostrar solo la operación de gap
+                    let d = details[i][j];
+                    html += `<div class='mini-val v-edge chosen'>${d.type==='up'?'↑':'←'} ${d.str}</div>`;
+                    html += `<div class='v-max'>${matrix[i][j]}</div>`;
+                } else if(details[i][j]) {
+                    let d = details[i][j];
+                    html += `<div class='mini-val v-diag ${d.diag===d.max?"chosen":""}'>↖ ${d.diagStr}=${d.diag}</div>`;
+                    html += `<div class='mini-val v-up   ${d.up  ===d.max?"chosen":""}'>↑ ${d.upStr}=${d.up}</div>`;
+                    html += `<div class='mini-val v-left ${d.left===d.max?"chosen":""}'>← ${d.leftStr}=${d.left}</div>`;
+                    html += `<div class='v-max'>${d.max}</div>`;
+                }
+                html += '</td>';
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        document.getElementById('nw-matrix').innerHTML = html;
+    }
+
+    /* showAlignment(): Traceback de NW.
+       Comienza en F(m,n) y sigue hacia F(0,0) eligiendo la dirección
+       que corresponde al valor calculado. Construye el alineamiento
+       acumulando caracteres en a1, a2 y los pipes en p. */
+    function showAlignment() {
+        let i = seq1.length, j = seq2.length;
+        let a1=[], p=[], a2=[];
+        pathCoords.push({i, j});
+
+        while(i > 0 || j > 0) {
+            let cur = matrix[i][j];
+            let c1 = i>0 ? seq1[i-1] : '-';
+            let c2 = j>0 ? seq2[j-1] : '-';
+            let isM = (c1 === c2);
+            let score = isM ? MATCH : MISMATCH;
+
+            if(i>0 && j>0 && cur === matrix[i-1][j-1]+score) {
+                // Viene de diagonal: match o mismatch
+                a1.unshift(c1); a2.unshift(c2);
+                p.unshift(isM ? '|' : '&nbsp;');
+                i--; j--;
+            } else if(i>0 && cur === matrix[i-1][j]+GAP) {
+                // Viene de arriba: gap en seq2
+                a1.unshift(c1); a2.unshift('-');
+                p.unshift('&nbsp;'); i--;
+            } else {
+                // Viene de izquierda: gap en seq1
+                a1.unshift('-'); a2.unshift(c2);
+                p.unshift('&nbsp;'); j--;
+            }
+            pathCoords.push({i, j});
+        }
+
+        // Renderizar el alineamiento con pipes entre las dos secuencias
+        let html  = `<div class='seq-row'>`+a2.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        html     += `<div class='pipe-row'>`+p.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        html     += `<div class='seq-row'>`+a1.map(c=>`<span>${c}</span>`).join('')+`</div>`;
+        document.getElementById('nw-alignment-result').innerHTML = html;
+        document.getElementById('nw-alignment-box').style.display = 'block';
+    }
+
+    /* nextStep(): Calcula F(i,j) paso a paso.
+       Al finalizar la matriz, llama a showAlignment(). */
+    function nextStep() {
+        let total = seq1.length * seq2.length;
+        if(step > total) {
+            if(step === total+1) {
+                document.getElementById('nw-explanation').innerHTML =
+                    "<span class='match-text'>¡Matriz completada!</span> Trazando camino...";
+                showAlignment();
+                drawMatrix();
+                step++;
+            }
+            return;
+        }
+
+        let i = Math.floor((step-1) / seq2.length) + 1;
+        let j = ((step-1) % seq2.length) + 1;
+        let c1=seq1[i-1], c2=seq2[j-1], isM=(c1===c2);
+        let score = isM ? MATCH : MISMATCH;
+
+        // Calcular los 3 candidatos (NO hay opción de 0 como en SW)
+        let diag = matrix[i-1][j-1] + score;
+        let up   = matrix[i-1][j]   + GAP;
+        let left = matrix[i][j-1]   + GAP;
+        let maxVal = Math.max(diag, up, left); // Diferencia clave vs SW: sin max(..., 0)
+
+        matrix[i][j] = maxVal;
+        details[i][j] = {
+            diag, up, left, max: maxVal,
+            diagStr: `${matrix[i-1][j-1]}${score>=0?'+'+score:score}`,
+            upStr:   `${matrix[i-1][j]}${GAP>=0?'+'+GAP:GAP}`,
+            leftStr: `${matrix[i][j-1]}${GAP>=0?'+'+GAP:GAP}`
+        };
+
+        let sT = isM
+            ? `<span class='match-text'>+${MATCH}</span>`
+            : `<span class='mismatch-text'>${MISMATCH}</span>`;
+        document.getElementById('nw-explanation').innerHTML =
+            `Calculando <b>(${i},${j})</b> | <b>${c1}</b> vs <b>${c2}</b><br>↖: ${matrix[i-1][j-1]} ${sT} = <b>${diag}</b> | ↑: <b>${up}</b> | ←: <b>${left}</b><br>Max: <b>${maxVal}</b>`;
+
+        drawMatrix(i, j);
+        step++;
+    }
+
+    function fastForward() { let t=seq1.length*seq2.length; while(step<=t+1) nextStep(); }
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ================================================================
+   MÓDULO BWT + FM-INDEX (BURROWS-WHEELER TRANSFORM)
+   Encapsulado con IIFE.
+
+   ALGORITMO (3 fases):
+
+   FASE 1 - Rotaciones Cíclicas:
+   Se generan todas las rotaciones del texto T+'$'. Para un texto
+   de longitud N se obtienen N rotaciones.
+
+   FASE 2 - Ordenamiento Lexicográfico:
+   Las N rotaciones se ordenan alfabéticamente. El símbolo '$'
+   (valor ASCII mínimo) siempre queda primero.
+
+   FASE 3 - Extracción de la BWT:
+   La BWT es la ÚLTIMA columna de la matriz ordenada.
+   El Suffix Array (SA) son los índices de inicio de cada rotación.
+
+   FM-INDEX (Backward Search):
+   Con la BWT y las tablas C (acumulado) y OCC (frecuencia),
+   se busca un patrón P leyendo de derecha a izquierda.
+   Fórmula: top = C[c] + OCC(c, top-1)
+            bot = C[c] + OCC(c, bot) - 1
+   Las posiciones de las ocurrencias se leen del SA en [top..bot].
+   ================================================================ */
+const BWT = (() => {
+    let originalText='', pattern='', N=0, unsorted=[], sorted=[], step=0;
+
+    /* init(): Prepara el texto con '$', genera rotaciones sin ordenar */
+    function init() {
+        let input = document.getElementById('bwt-input').value.toUpperCase().replace(/\$/g,'').trim() || 'BANANA';
+        pattern   = document.getElementById('bwt-pattern').value.toUpperCase().trim() || 'ANA';
+
+        // Agregar marcador de fin '$' (lexicográficamente menor que cualquier letra)
+        originalText = input + '$';
+        N = originalText.length;
+
+        // Generar todas las N rotaciones cíclicas
+        // sa: índice de inicio en el texto original (= Suffix Array)
+        unsorted = [];
+        for(let i=0; i<N; i++) {
+            unsorted.push({
+                str: originalText.slice(i) + originalText.slice(0, i), // rotación i
+                sa: i
+            });
+        }
+
+        // sorted se llenará en el Paso N+1 (al ordenar)
+        sorted = [...unsorted].sort((a,b) => a.str.localeCompare(b.str));
+
+        step = 1;
+        document.getElementById('bwt-explanation').innerHTML =
+            `Texto inicial: <span class='bwt-text'>${originalText}</span>.<br>Haz clic en 'Paso a Paso'.`;
+        document.getElementById('bwt-dashboard').style.display = 'none';
+        drawMatrix();
+    }
+
+    /* drawMatrix(): Renderiza la matriz BWT en la etapa actual.
+       - Pasos 1..N:      mostrando rotaciones una por una (unsorted)
+       - Paso N+1:        mostrando la matriz ordenada con columna F resaltada
+       - Paso N+2:        mostrando columna L (la BWT) resaltada */
+    function drawMatrix() {
+        let html = '<table>';
+        for(let i=0; i<N; i++) {
+            // En fase 1: mostrar filas ya generadas; en fase 2+: usar ordenadas
+            let rowObj = step<=N ? (i<step ? unsorted[i] : null) : sorted[i];
+            let rowStr = rowObj ? rowObj.str : '';
+
+            html += '<tr>';
+            for(let j=0; j<N; j++) {
+                let char = rowStr ? rowStr[j] : '';
+                let cls  = '';
+                // Representar '$' con clase especial para colorear en azul
+                let inner = char==='$' ? `<span class='eof-symbol'>$</span>` : char;
+
+                if(step<=N && i===step-1 && rowStr) cls += ' highlight-row'; // Fila recién añadida
+                if(step>N  && j===0     && rowStr) cls += ' first-col';     // Columna F (verde)
+                if(step>N+1&& j===N-1   && rowStr) cls += ' last-col';      // Columna L/BWT (rojo)
+
+                html += `<td class='bwt-cell ${cls}'>${inner}</td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        document.getElementById('bwt-matrix').innerHTML = html;
+    }
+
+    /* buildDashboard(): Construye el FM-Index completo y el Backward Search.
+       Se llama una sola vez cuando el cálculo termina (paso N+2).
+
+       Pasos internos:
+       1. Extraer BWT (última columna) y SA (primera columna implícita)
+       2. Calcular tabla C: C[c] = nº de caracteres menores que c en T
+       3. Calcular tabla OCC: OCC[c][i] = nº de veces que c aparece en BWT[0..i]
+       4. Ejecutar Backward Search con el patrón ingresado
+    */
+    function buildDashboard() {
+        // Extraer BWT y SA de la matriz ordenada
+        let bwt = sorted.map(x => x.str[N-1]);    // Última columna de cada rotación
+        let SA  = sorted.map(x => x.sa);            // Índice de inicio (Suffix Array)
+
+        // Calcular el alfabeto único y conteo de cada carácter
+        let counts = {};
+        for(let c of originalText) counts[c] = (counts[c] || 0) + 1;
+        let alphabet = Object.keys(counts).sort(); // Ordenar lexicográficamente
+
+        /* Tabla C: C[c] = número de caracteres menores que c en T.
+           Permite saber el rango inicial de c en la primera columna (F). */
+        let C = {};
+        let sum = 0;
+        for(let c of alphabet) {
+            C[c] = sum;
+            sum += counts[c];
+        }
+
+        /* Tabla OCC: OCC[i][c] = número de ocurrencias de c en BWT[0..i].
+           Es la tabla de ocurrencias acumuladas necesaria para el Backward Search. */
+        let Occ = [];
+        let curOcc = {};
+        alphabet.forEach(c => curOcc[c] = 0);
+        for(let i=0; i<N; i++) {
+            curOcc[bwt[i]]++;
+            Occ.push({...curOcc}); // Snapshot del conteo hasta la fila i
+        }
+
+        // === CONSTRUCCIÓN DEL HTML DEL DASHBOARD ===
+
+        let dashHTML = `<div class="fm-dashboard-inner">`;
+
+        // 1. Header con BWT y SA
+        dashHTML += `<div class="fm-header-bar">
+            <div class="fm-header-pill">BWT = <b style="letter-spacing:3px; color:var(--warning); margin-left:10px;">${bwt.join('').replace(/\$/g,'<span class="eof-symbol">$</span>')}</b></div>
+            <div class="fm-header-pill">SA = <b style="margin-left:10px;">[${SA.join(', ')}]</b></div>
+        </div>`;
+
+        // 2. Tablas C y OCC en paralelo
+        dashHTML += `<div class="fm-tables">`;
+
+        // Tabla C
+        dashHTML += `<div class="fm-table-wrap">
+            <h4>Paso 4 — FM-Index: Tabla C</h4>
+            <table class="fm-table"><tr><th>C</th><th>C[C]</th><th>CONTEO EN T</th></tr>`;
+        alphabet.forEach(c => {
+            let dispC = c==='$' ? `<span class="eof-symbol">$</span>` : c;
+            dashHTML += `<tr><td><b>${dispC}</b></td><td>${C[c]}</td><td>${counts[c]}</td></tr>`;
+        });
+        dashHTML += `</table></div>`;
+
+        // Tabla OCC
+        dashHTML += `<div class="fm-table-wrap">
+            <h4>Tabla OCC(C, I)</h4>
+            <table class="fm-table"><tr><th>I</th><th>BWT[I]</th>`;
+        alphabet.forEach(c => dashHTML += `<th>OCC(${c==='$'?'$':c},I)</th>`);
+        dashHTML += `</tr>`;
+        for(let i=0; i<N; i++) {
+            let dispBWT = bwt[i]==='$' ? `<span class="eof-symbol">$</span>` : bwt[i];
+            dashHTML += `<tr><td>${i}</td><td style="color:var(--danger)"><b>${dispBWT}</b></td>`;
+            alphabet.forEach(c => dashHTML += `<td>${Occ[i][c]}</td>`);
+            dashHTML += `</tr>`;
+        }
+        dashHTML += `</table></div></div>`;
+
+        // 3. Backward Search: aplica la fórmula iterativamente de derecha a izquierda
+        dashHTML += `<div class="fm-bs">
+            <h4>Paso 5 — Backward Search: "${pattern}" <span style="font-size:14px; opacity:0.7; font-weight:normal;">(lectura de derecha → izquierda)</span></h4>
+            <div class="fm-formula">Fórmula: top = C[c] + Occ(c, top-1) &nbsp;|&nbsp; bot = C[c] + Occ(c, bot) - 1</div>
+            <div class="bs-step inicio">
+                Inicio: rango inicial = <span class="range-pill">[top=0, bot=${N-1}]</span> (toda la BWT)
+            </div>`;
+
+        let top=0, bot=N-1, valid=true;
+
+        // Iterar el patrón de derecha a izquierda
+        for(let pIdx = pattern.length-1; pIdx >= 0; pIdx--) {
+            let c = pattern[pIdx];
+            if(!alphabet.includes(c)) { valid=false; break; } // Carácter no existe en T
+
+            let oldTop=top, oldBot=bot;
+
+            // Calcular OCC para los bordes del rango
+            let occTop1 = oldTop-1 < 0 ? 0 : Occ[oldTop-1][c]; // OCC(c, top-1)
+            let occBot  = oldBot  < 0 ? 0 : Occ[oldBot][c];      // OCC(c, bot)
+
+            // Aplicar la fórmula del Backward Search
+            top = C[c] + occTop1;
+            bot = C[c] + occBot - 1;
+
+            let itNum = pattern.length - pIdx;
+            dashHTML += `<div class="bs-step">
+                <div class="char-badge">${c}</div>
+                <div class="char-details">
+                    <div style="opacity:0.8; font-size:14px; margin-bottom:5px;">Carácter <b>"${c}"</b> — iteración ${itNum} de ${pattern.length}</div>
+                    <div>top = C[${c}] + Occ(${c}, ${oldTop-1}) = ${C[c]} + ${occTop1} = <b>${top}</b></div>
+                    <div>bot = C[${c}] + Occ(${c}, ${oldBot}) - 1 = ${C[c]} + ${occBot} - 1 = <b>${bot}</b></div>
+                    <div style="margin-top:5px;">Nuevo rango: <span class="range-pill">[top=${top}, bot=${bot}]</span> → ${Math.max(0, bot-top+1)} fila(s) en SA</div>
+                </div>
+            </div>`;
+
+            if(top > bot) { valid=false; break; } // Rango vacío: patrón no encontrado
+        }
+        dashHTML += `</div>`;
+
+        // 4. Resultado final: leer posiciones del SA en el rango [top..bot]
+        dashHTML += `<div class="fm-results"><h4>Resultado final</h4>`;
+        if(valid && top <= bot) {
+            let matchesCount = bot - top + 1;
+            dashHTML += `<div class="summary-pill">✓ "${pattern}" - ${matchesCount} ocurrencia(s) encontrada(s)</div>`;
+
+            // Obtener posiciones y ordenarlas cronológicamente
+            let foundPositions = [];
+            for(let k=top; k<=bot; k++) foundPositions.push(SA[k]);
+            foundPositions.sort((a,b) => a-b);
+
+            foundPositions.forEach(pos => {
+                dashHTML += `<div class="match-card">
+                    <div class="match-pos">POS ${pos}</div>
+                    <div class="match-chars">`;
+                for(let j=0; j<pattern.length; j++) {
+                    dashHTML += `<div class="char-block"><span>${pattern[j]}</span><small>[${pos+j}]</small></div>`;
+                }
+                dashHTML += `</div></div>`;
+            });
+        } else {
+            dashHTML += `<div class="summary-pill error">✗ "${pattern}" - 0 ocurrencias encontradas</div>`;
+        }
+        dashHTML += `</div></div>`;
+
+        // Inyectar el dashboard en el DOM
+        let dash = document.getElementById('bwt-dashboard');
+        dash.innerHTML = dashHTML;
+        dash.style.display = 'block';
+    }
+
+    /* nextStep(): Controla el flujo por fases de la visualización BWT.
+       Fases:
+       - steps 1..N:   agregar rotaciones una por una
+       - step N+1:     mostrar matriz ordenada (+ columna F verde)
+       - step N+2:     mostrar columna L/BWT (roja) + lanzar dashboard FM-Index */
+    function nextStep() {
+        if(step > N+2) return;
+
+        if(step <= N) {
+            // FASE 1: agregar la rotación número 'step'
+            let rowStr = unsorted[step-1].str.replace(/\$/g,"<span class='eof-symbol'>$</span>");
+            document.getElementById('bwt-explanation').innerHTML =
+                `<b>Fase 1: Rotaciones Cíclicas</b><br>Desplazando letra al final:<br><span class='bwt-text'>${rowStr}</span>`;
+            drawMatrix();
+            step++;
+        } else if(step === N+1) {
+            // FASE 2: ordenar lexicográficamente y mostrar matriz ordenada
+            document.getElementById('bwt-explanation').innerHTML =
+                `<b>Fase 2: Ordenamiento Lexicográfico</b><br>Ordenamos filas alfabéticamente. La <span class='match-text'>columna verde</span> inicia con $.`;
+            drawMatrix();
+            step++;
+        } else if(step === N+2) {
+            // FASE 3: extraer BWT (columna roja) y generar FM-Index
+            document.getElementById('bwt-explanation').innerHTML =
+                `<b>Fase 3: Extracción de la BWT y Backward Search</b><br>Generando panel analítico FM-Index abajo...`;
+            drawMatrix();
+            buildDashboard(); // Construir y mostrar el dashboard completo
+            step++;
+        }
+    }
+
+    /* fastForward(): Ejecuta todos los pasos restantes de una vez */
+    function fastForward() { while(step <= N+2) nextStep(); }
+
+    return { init, nextStep, fastForward, reset: init };
+})();
+
+/* ================================================================
+   INICIALIZACIÓN AL CARGAR LA PÁGINA
+   Se ejecuta cuando el DOM está completamente cargado.
+   Inicializa los tres módulos con los valores por defecto de los inputs.
+   ================================================================ */
+window.onload = () => {
+    SW.init();   // Inicializar Smith-Waterman con ATAT / TATA
+    NW.init();   // Inicializar Needleman-Wunsch con ACGTGA / ACTAGA
+    BWT.init();  // Inicializar BWT con BANANA, patrón ANA
+};
+</script>
+</body>
+</html>
